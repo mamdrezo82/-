@@ -23,7 +23,6 @@ jobs:
           distribution: temurin
           java-version: 21
 
-      # مرحله ۱: ساخت پوشه www (بسیار مهم)
       - name: Prepare Web Assets (Create www)
         run: |
           mkdir -p www
@@ -42,25 +41,28 @@ jobs:
       - name: Add Android platform
         run: npx cap add android
 
-      # مرحله ۲: نصب پلاگین جاوا و مجوزها
+      # مرحله نصب پلاگین
       - name: Patch Android project (save-file plugin, permissions)
         run: node scripts/setup-android.mjs
 
-      # مرحله ۳: ساخت آیکون‌ها
+      # مرحله جدید: اصلاح خودکار ایمپورت جاوا برای سازگاری با Capacitor 7
+      - name: Fix Capacitor 7 Java Import
+        run: |
+          sed -i 's|import com.getcapacitor.ActivityResult;|import androidx.activity.result.ActivityResult;|' android/app/src/main/java/com/roozyar/personal/RoozYarSaveFilePlugin.java
+
       - name: Generate launcher icons
         run: npx capacitor-assets generate --android
 
       - name: Sync Android project
         run: npx cap sync android
 
-      # مرحله ۴: بهینه‌سازی برای کاهش حجم
+      # بهینه‌سازی حجم
       - name: Apply Size Optimizations
         run: |
           sed -i 's/minifyEnabled false/minifyEnabled true\n            shrinkResources true/' android/app/build.gradle
           sed -i 's|proguard-android.txt|proguard-android-optimize.txt|' android/app/build.gradle
           sed -i '/defaultConfig {/a\        ndk { abiFilters "arm64-v8a" }' android/app/build.gradle
 
-      # مرحله ۵: ساخت نسخه Release (به جای Debug)
       - name: Build release APK
         working-directory: android
         run: chmod +x gradlew && ./gradlew assembleRelease
