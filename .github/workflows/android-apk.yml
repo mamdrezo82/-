@@ -1,0 +1,73 @@
+name: Build RoozYar Android APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main, master ]
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      # مرحله ۱: ساخت پوشه www (بسیار مهم)
+      - name: Prepare Web Assets (Create www)
+        run: |
+          mkdir -p www
+          cp -r * www/ || true
+          rm -rf www/www www/.git www/.github
+
+      - name: Check JavaScript syntax
+        run: node --check www/app.js
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build plugin bridge
+        run: npm run build
+
+      - name: Add Android platform
+        run: npx cap add android
+
+      # مرحله ۲: نصب پلاگین جاوا و مجوزها
+      - name: Patch Android project (save-file plugin, permissions)
+        run: node scripts/setup-android.mjs
+
+      # مرحله ۳: ساخت آیکون‌ها
+      - name: Generate launcher icons
+        run: npx capacitor-assets generate --android
+
+      - name: Sync Android project
+        run: npx cap sync android
+
+      # مرحله ۴: بهینه‌سازی برای کاهش حجم
+      - name: Apply Size Optimizations
+        run: |
+          sed -i 's/minifyEnabled false/minifyEnabled true\n            shrinkResources true/' android/app/build.gradle
+          sed -i 's|proguard-android.txt|proguard-android-optimize.txt|' android/app/build.gradle
+          sed -i '/defaultConfig {/a\        ndk { abiFilters "arm64-v8a" }' android/app/build.gradle
+
+      # مرحله ۵: ساخت نسخه Release (به جای Debug)
+      - name: Build release APK
+        working-directory: android
+        run: chmod +x gradlew && ./gradlew assembleRelease
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: RoozYar-Android-APK
+          path: android/app/build/outputs/apk/release/app-release.apk
+          if-no-files-found: error
